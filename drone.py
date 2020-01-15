@@ -1,9 +1,16 @@
 import numpy as np
 import pdb
+import matplotlib.pyplot as plt
+def unit(vec):
+    mag = np.linalg.norm(vec)
+    return vec / mag
+
+def calc_angle(vec1, vec2):
+    theta = np.arccos(np.dot(vec1,vec2) / np.linalg.norm(vec1) / np.linalg.norm(vec2))
+    return np.degrees(theta)
+
 class Drone:
-    def __init__(self, repulsion, attraction, pos, vel):
-        self.repulsion = repulsion
-        self.attraction = attraction
+    def __init__(self, pos, vel):
         self.pos = pos
         self.vel = vel
         self.vec_mag_limit = 1
@@ -12,7 +19,7 @@ class Drone:
     def in_threshold(self, target, threshold):
         return target < threshold[1] and target > threshold[0]
 
-    def get_neighbor_vecs(self, drones, carrot, threshold=(0,6), debug=False):
+    def get_neighbor_vecs(self, drones, carrot, thresh_dist=(0,6), thresh_angle = 15, debug=False):
         """
         return the neighbors within a certain distance of the drone
         """
@@ -20,15 +27,16 @@ class Drone:
         for drone in drones:
             if drone is not self:
                 vec, dist = self.calc_dist(drone.pos)
+                angle = calc_angle(self.vel, vec)
                 if dist < 0.5 and debug: print('CRASH')
-                if self.in_threshold(dist, threshold):
-                    neighbor_vecs.append((vec, dist))
+                if self.in_threshold(dist, thresh_dist) and thresh_angle > angle:
+                    neighbor_vecs.append((vec, dist, angle))
         vec, dist = self.calc_dist(carrot)
-        neighbor_vecs.append((vec,dist))
+        neighbor_vecs.append((vec,dist, -1))
         return neighbor_vecs
 
-    def calc_center_vector(self, drones, carrot, threshold=(0,6)):
-        neighbor_vecs = self.get_neighbor_vecs(drones, carrot, threshold, debug=True)
+    def calc_center_vector(self, drones, carrot, threshold=(0,6), thresh_angle=15):
+        neighbor_vecs = self.get_neighbor_vecs(drones, carrot, threshold, thresh_angle, debug=True)
         if not neighbor_vecs:
             return self.null_vector
         center = sum([vec[0] for vec in neighbor_vecs])/len(neighbor_vecs)
@@ -59,78 +67,49 @@ class Drone:
         if mag < limit:
             return vec
         return vec * (limit / mag)
-    def unit(self, vec):
-        mag = np.linalg.norm(vec)
-        return vec / mag
+
+
 
     def calc_goal_vec(self, drones, carrot):
-        avoid_weight = -20
-        attract_weight = 8
-        center_weight = 0.2
+        avoid_weight = -10
+        attract_weight = 3
+        center_weight = 5
 
-        avoid_vec = avoid_weight * (self.calc_center_vector(drones, carrot, (0, .5)))
-        # if not np.array_equal(self.null_vector, avoid_vec):
-            # print('avoid')
-            # plt.quiver(*self.pos, avoid_vec[0], avoid_vec[1])
+        avoid_vec = avoid_weight * (self.calc_center_vector(drones, carrot, (0, 1), 120))
         attract_vec = attract_weight * (carrot - self.pos)
-        center_vec = center_weight * (self.calc_center_vector(drones, carrot, (0, 1.5)))
+        center_vec = center_weight * (self.calc_center_vector(drones, carrot, (0, 2)))
         print('avoid vec: ', avoid_vec)
         print('center vec: ', center_vec)
         print('attract vec: ', attract_vec)
         return self.limit_vec(avoid_vec + center_vec + attract_vec)
 
     def step(self, goal_vec):
-        mu = 0.1
+        mu = 0.02
         self.pos += self.vel
         self.vel = self.limit_vec(self.vel * (1-mu) + goal_vec * mu, 0.1)
 
 
 if __name__ == "__main__":
-    import matplotlib.pyplot as plt
-    from matplotlib import animation
-    import time
-    v0 = np.array([0.0,0.0])
+    carrot = np.array([0.0, 0.0])
     drones = []
     for i in range(15):
         r = 5
         pos = np.random.rand(2,) * 5 - r/2
-        drones.append(Drone(None, None, pos, v0))
-    carrot = np.array([0.0,0.0])
-    # d1 = Drone(None, None, np.array([1.0,1.0]), v0)
-    # d2 = Drone(None, None, np.array([3.0,4.0]), v0)
-    # drones = [d1, d2]
-    fig = plt.figure()
-
+        vel = unit(np.random.rand(2,)) * 0.1
+        drones.append(Drone(pos, vel))
+    plt.figure()
     plt.axis('equal')
-    plt.title('thing')
-    plt.xlabel('x')
-    plt.ylabel('y')
-    plt.grid(True)
-    colors = ['r', 'b', 'g', 'y', 'k', 'm', 'orange', 'navy', 'aqua', 'violet', 'salmon', 'lime', 'indigo', 'pink', 'plum', 'teal']
-    scat = plt.scatter([drone.pos[0] for drone in drones], [drone.pos[1] for drone in drones])
-    plt.xlim([-r, r])
-    plt.ylim([-r, r])
-
-
-    def update(f_num):
-        goals = []
-        plt.hold(False)
-        plt.scatter(0,0,color='black', marker='*', s=20)
-        plt.hold(True)
-
-        plt.axis('equal')
-        plt.grid('on')
-        for i, drone in enumerate(drones):
-            g = drone.calc_goal_vec(drones, carrot)
-            goals.append(g)
-            plt.scatter(drone.pos[0], drone.pos[1], color=colors[i])
-            plt.quiver(*drone.pos, g[0], g[1], color='black', width=0.003, headwidth=1, headlength=1)
-            # plt.quiver(*drone.pos, drone.vel[0], drone.vel[1], color='grey')
-            plt.xlim([-r, r])
-            plt.ylim([-r, r])
-        for goal, drone in zip(goals, drones):
-            drone.step(goal)
-        scat.set_offsets([drone.pos for drone in drones])
-
-    ani = animation.FuncAnimation(fig, update, frames=500, interval=10, repeat=False)
+    p1 = drones[0].pos[0]
+    p2 = drones[0].pos[1]
+    for drone in drones:
+        plt.scatter(drone.pos[0], drone.pos[1], color='grey')
+    plt.scatter(p1, p2, s=30, color='black')
+    plt.quiver(*drones[0].pos, drones[0].vel[0], drones[0].vel[1])
+    ns = drones[0].get_neighbor_vecs(drones, carrot)
+    print(ns)
+    vs = [vec[0] for vec in ns]
+    for i, v in enumerate(vs):
+        plt.scatter(v[0] + p1, v[1] + p2, color='red')
+        print(ns[i][2])
+    # pdb.trace()
     plt.show()
