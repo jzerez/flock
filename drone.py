@@ -12,7 +12,7 @@ class Drone:
     def in_threshold(self, target, threshold):
         return target < threshold[1] and target > threshold[0]
 
-    def get_neighbor_vecs(self, drones, threshold=(0,6), debug=False):
+    def get_neighbor_vecs(self, drones, carrot, threshold=(0,6), debug=False):
         """
         return the neighbors within a certain distance of the drone
         """
@@ -23,10 +23,12 @@ class Drone:
                 if dist < 0.5 and debug: print('CRASH')
                 if self.in_threshold(dist, threshold):
                     neighbor_vecs.append((vec, dist))
+        vec, dist = self.calc_dist(carrot)
+        neighbor_vecs.append((vec,dist))
         return neighbor_vecs
 
-    def calc_center_vector(self, drones, threshold=(0,6)):
-        neighbor_vecs = self.get_neighbor_vecs(drones, threshold, debug=True)
+    def calc_center_vector(self, drones, carrot, threshold=(0,6)):
+        neighbor_vecs = self.get_neighbor_vecs(drones, carrot, threshold, debug=True)
         if not neighbor_vecs:
             return self.null_vector
         center = sum([vec[0] for vec in neighbor_vecs])/len(neighbor_vecs)
@@ -61,72 +63,74 @@ class Drone:
         mag = np.linalg.norm(vec)
         return vec / mag
 
-    def calc_goal_vec(self, drones):
-        avoid_weight = -5
-        attract_weight = 3
-        center_weight = 3
+    def calc_goal_vec(self, drones, carrot):
+        avoid_weight = -20
+        attract_weight = 8
+        center_weight = 0.2
 
-        avoid_vec = avoid_weight * (self.calc_center_vector(drones, (0, 1)))
-        if not np.array_equal(self.null_vector, avoid_vec):
-            print('avoid')
+        avoid_vec = avoid_weight * (self.calc_center_vector(drones, carrot, (0, .5)))
+        # if not np.array_equal(self.null_vector, avoid_vec):
+            # print('avoid')
             # plt.quiver(*self.pos, avoid_vec[0], avoid_vec[1])
-
-        center_vec = center_weight * (self.calc_center_vector(drones, (0, 6)))
+        attract_vec = attract_weight * (carrot - self.pos)
+        center_vec = center_weight * (self.calc_center_vector(drones, carrot, (0, 1.5)))
         print('avoid vec: ', avoid_vec)
         print('center vec: ', center_vec)
-        return self.limit_vec(avoid_vec + center_vec)
+        print('attract vec: ', attract_vec)
+        return self.limit_vec(avoid_vec + center_vec + attract_vec)
 
     def step(self, goal_vec):
-        mu = 0.3
+        mu = 0.1
         self.pos += self.vel
-        self.vel = self.limit_vec(self.vel * (1-mu) + goal_vec * mu, 0.3)
+        self.vel = self.limit_vec(self.vel * (1-mu) + goal_vec * mu, 0.1)
 
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     from matplotlib import animation
     import time
-    v0 = (0,0)
+    v0 = np.array([0.0,0.0])
     drones = []
-    # d1 = Drone(None, None, np.array([1,1]), v0)
-    # d2 = Drone(None, None, np.array([2,2]), v0)
-    # d3 = Drone(None, None, np.array([3,3]), v0)
-    # d4 = Drone(None, None, np.array([6,6]), v0)
-    # d5 = Drone(None, None, np.array([10,10]), v0)
-    # drones = [d1, d2, d3, d4, d5]
-    # print(d1.calc_center_vector(drones, ))
-    for i in range(3):
+    for i in range(15):
         r = 5
         pos = np.random.rand(2,) * 5 - r/2
         drones.append(Drone(None, None, pos, v0))
+    carrot = np.array([0.0,0.0])
     # d1 = Drone(None, None, np.array([1.0,1.0]), v0)
     # d2 = Drone(None, None, np.array([3.0,4.0]), v0)
     # drones = [d1, d2]
-    plt.figure()
-    plt.axis('equal')
-    colors = ['r', 'b', 'g', 'y', 'k', 'm', 'orange', 'navy', 'aqua', 'violet']
-    for i, drone in enumerate(drones):
-        # plt.scatter(drone.pos[0], drone.pos[1])
-        g = drone.calc_goal_vec(drones)
-        drone.vel = g
-        # cen = drone.calc_center_vector(drones)
-    #     plt.quiver(*drone.pos, g[0], g[1])
-    #     plt.scatter(cen[0], cen[1], marker='*', color = colors[i])
-    # plt.show()
-    print('initializtion done')
-    for i in range(20):
-        goals = []
-        for i, drone in enumerate(drones):
-            g = drone.calc_goal_vec(drones)
-            goals.append(g)
-            print('goal: ', g)
-            plt.scatter(drone.pos[0], drone.pos[1], color=colors[i])
-            # plt.quiver(*drone.pos, g[0], g[1], color='black', width=0.01, headwidth=1, headlength=2)
-            plt.quiver(*drone.pos, drone.vel[0], drone.vel[1], color='grey')
+    fig = plt.figure()
 
+    plt.axis('equal')
+    plt.title('thing')
+    plt.xlabel('x')
+    plt.ylabel('y')
+    plt.grid(True)
+    colors = ['r', 'b', 'g', 'y', 'k', 'm', 'orange', 'navy', 'aqua', 'violet', 'salmon', 'lime', 'indigo', 'pink', 'plum', 'teal']
+    scat = plt.scatter([drone.pos[0] for drone in drones], [drone.pos[1] for drone in drones])
+    plt.xlim([-r, r])
+    plt.ylim([-r, r])
+
+
+    def update(f_num):
+        goals = []
+        plt.hold(False)
+        plt.scatter(0,0,color='black', marker='*', s=20)
+        plt.hold(True)
+
+        plt.axis('equal')
+        plt.grid('on')
+        for i, drone in enumerate(drones):
+            g = drone.calc_goal_vec(drones, carrot)
+            goals.append(g)
+            plt.scatter(drone.pos[0], drone.pos[1], color=colors[i])
+            plt.quiver(*drone.pos, g[0], g[1], color='black', width=0.003, headwidth=1, headlength=1)
+            # plt.quiver(*drone.pos, drone.vel[0], drone.vel[1], color='grey')
+            plt.xlim([-r, r])
+            plt.ylim([-r, r])
         for goal, drone in zip(goals, drones):
             drone.step(goal)
-            print('taking step')
-        plt.draw()
-        plt.pause(0.1)
+        scat.set_offsets([drone.pos for drone in drones])
+
+    ani = animation.FuncAnimation(fig, update, frames=500, interval=10, repeat=False)
     plt.show()
